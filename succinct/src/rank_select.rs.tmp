@@ -1,0 +1,183 @@
+use bit_vec::BitVec;
+
+/* Big Endian Manipulation of bit vectors */
+
+// to and from Big Endian bv
+
+pub fn safe_bv_to_u32(bv: &BitVec) -> u32 {
+    assert!(bv.len() < 32);
+    let padding = 32 - bv.len();
+    let _bv = pad(&bv, padding);
+    return bv_to_u32(&_bv);
+}
+pub fn bv_to_u32(bv: &BitVec) -> u32{
+    assert!(bv.len() == 32);
+    let mut bytes = [0u8; 4];
+    bytes.copy_from_slice(&bv.to_bytes());
+    return u32::from_be_bytes(bytes);
+}
+
+pub fn u32_to_bv(i: u32) -> BitVec{
+    return BitVec::from_bytes(&i.to_be_bytes());
+}
+
+pub fn get(bv: &BitVec, i: usize) -> bool {
+    return bv[bv.len() - i - 1]
+}
+
+// O(n) bitvector slicing, get bits [i, j)
+pub fn get_range(in_bv: &BitVec, i: usize, j: usize) -> BitVec{
+    assert!(j <= in_bv.len());
+    assert!(i <= j);
+
+    let n = j - i;
+    let mut bv = BitVec::from_elem(n, false);
+
+    let n_bits = bv.len();
+    for k in i..j{
+        bv.set(n_bits - (k-i) - 1, get(&in_bv, k));
+    }
+    return bv
+}
+
+fn pad32(in_bv: &BitVec) -> BitVec {
+    assert!(in_bv.len() <= 32);
+    return pad(&in_bv, 32 - in_bv.len())
+}
+
+fn pad(in_bv: &BitVec, pad_size: usize) -> BitVec{
+    let n_bits = in_bv.len() + pad_size;
+    let mut bv = BitVec::from_elem(n_bits, false);
+    for i in 0.. in_bv.len() {
+        bv.set(pad_size + i, in_bv[i])
+    }
+    return bv
+}
+
+/* SUCCINCT! */
+
+pub struct RankBV {
+    pub bv: BitVec,
+    pub s: usize, // Probably can be smaller uint
+    pub b: usize, 
+    pub rs: Vec<usize>,
+    pub rb: Vec<Vec<usize>>,
+    pub rp: Vec<Vec<usize>>,
+    pub rb_size: usize,
+
+}
+
+// Slow O(n) rank of bitvector from [i, j)
+fn sum_in_range(bv:&BitVec, i: usize, j: usize) -> usize{
+    assert!(j <= bv.len());
+    assert!(i <= j);
+    return sum(&get_range(&bv, i, j))
+}
+
+fn sum(bv: &BitVec) -> usize{
+    return bv.iter().filter(|x| *x).count()
+}
+
+fn get_block(bv: &BitVec, i:usize, b_size: usize) -> BitVec{
+    return get_range(&bv, i * b_size, (i+1) * b_size)
+}
+
+fn superblock_size(n: usize) -> usize{
+    // return size of superblocks
+    let _n = n as f64;
+    let s = (_n.log2() * _n.log2() / 2.0).floor(); //Should this be ceil?
+    return s as usize
+}
+
+fn block_size(n: usize) -> usize {
+    let _n = n as f64;
+    return (_n.log2() / 2.) as usize;
+}
+
+fn n_blocks(n: usize, b_size: usize) -> usize {
+    // return number of blocks of b_size require to cover n
+    return (n as f64 / b_size as f64).ceil() as usize;
+}
+
+// Rank of superblock
+fn block_rank(bv: &BitVec, i: usize, s: usize) -> usize {
+    if i == 0 {
+        return 0
+    }
+    return sum_in_range(&bv, 0, i * s);
+}
+
+fn get_rp_table(b_size: usize) -> Vec<Vec<usize>>{
+    let elems = 2_usize.pow(b_size as u32); //are these uints right?
+    let mut table = vec![vec![0usize; b_size]; elems as usize];
+    for i in 0..elems {
+        let bv = u32_to_bv(i as u32);
+        println!("{:?}", bv);
+        for j in 0..b_size{
+            table[i][j] = sum_in_range(&bv, 0, j+1) as usize;
+        }
+    }
+    return table
+}
+
+fn copy(bv: &BitVec) -> BitVec {
+    return BitVec::from_bytes(&bv.to_bytes());
+}
+
+pub fn from_bit_vec(in_bv: BitVec) -> RankBV {
+    let s = superblock_size(in_bv.len());
+    
+    let mut bv = copy(&in_bv);
+
+    if in_bv.len() % s != 0 {
+        let n_superblocks = n_blocks(bv.len(), s);
+        bv = pad(&bv, n_superblocks * s - bv.len())
+    }
+
+    let n = bv.len();
+
+    let rs_size = n_blocks(n, s);
+
+    let b = block_size(n);
+    let rb_size = n_blocks(s, b);
+
+    let mut rs = vec![0; rs_size];
+    let mut rb = vec![vec![0; rb_size]; rs_size];
+    let rp = get_rp_table(b);
+
+    for s_i in 0.. rs.len(){
+        rs[s_i] = block_rank(&bv, s_i, s);
+        let superblock = get_block(&bv, s_i, s);
+        for b_i in 0.. rb_size{
+            rb[s_i][b_i] = block_rank(&superblock, b_i, b);
+        }
+    }
+
+    let rbv = RankBV{
+                bv: bv,
+                s: s,
+                b: b, 
+                rs: rs,
+                rb: rb,
+                rp: rp,
+                rb_size: rb_size,
+              };
+
+    return rbv
+}
+
+pub fn rank(sbv: &RankBV, i: usize) -> usize {
+    let s_i = i / sbv.s;
+    let b_i = (i as f64) % (sbv.s as f64);
+    let b_offset = (b_i / (sbv.b as f64)).floor() as usize;
+
+    let block = get_block(&sbv.bv, b_offset, sbv.b);
+    let padded_block = pad32(&block);
+    let rp_i = bv_to_u32(&padded_block) as usize;
+
+    println!("{:?}", padded_block);
+    println!("rpi {}", rp_i);
+    let rp_val = sbv.rp[rp_i as usize][i % sbv.b as usize];
+
+    return sbv.rs[s_i] + sbv.rb[s_i][b_offset] + rp_val;
+}
