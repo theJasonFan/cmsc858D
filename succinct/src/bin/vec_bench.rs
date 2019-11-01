@@ -3,7 +3,6 @@ use rand::Rng;
 
 use succinct::bv::BitVec;
 use succinct::rank_select::RankSupport;
-use succinct::rank_select::cdiv;
 
 use std::env;
 use std::time::Instant;

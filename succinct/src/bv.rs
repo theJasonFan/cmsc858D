@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BitVec {
     n: usize,
     blocks: Vec<u32>,
@@ -34,14 +34,14 @@ impl BitVec {
     }
 
     pub fn get_int(&self, i: usize, w: usize) -> u32 {
+        assert!(i < self.len());
         // within
         let b_i = i / 32_usize;
 
         let lo = i % 32_usize;
         let hi = (64_usize - lo - w) % 32_usize;
         
-        //let v = self.blocks[i / 32];
-        let mut v = 0;
+        let v: u32;
         if lo + w <= 32 {
             let mut block = self.blocks[b_i];
             let mask = Self::get_mask(lo, w);
@@ -60,6 +60,7 @@ impl BitVec {
     }
 
     pub fn set_int(&mut self, i: usize, v: u32, w: usize) {
+        assert!(i < self.len());
         Self::val_fits(v, w);
 
         let b_i = i / 32_usize;
@@ -133,6 +134,14 @@ impl BitVec {
         Self::from_padded_bytes(bytes, 0)
     }
 
+    pub fn to_vec(&self) -> Vec<bool> {
+        let mut v = vec![false; self.len()];
+        for i in 0..self.len() {
+            v[i] = self.get(i);
+        }
+        v
+    }
+
     pub fn print_bits(&self){
         for i in 0..self.len(){
             print!("{}", self.get(i) as u8);
@@ -145,7 +154,7 @@ impl BitVec {
 //     fn 
 // }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IntVec {
     word_size: usize,
     bv: BitVec,
@@ -174,6 +183,10 @@ impl IntVec {
 
     pub fn len(&self) -> usize{
         self.n
+    }
+
+    pub fn w_size(&self) -> usize {
+        self.word_size
     }
 
     pub fn size_of(&self) -> usize {

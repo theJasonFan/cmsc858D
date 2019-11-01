@@ -3,7 +3,6 @@ use rand::Rng;
 
 use succinct::bv::BitVec;
 use succinct::rank_select::RankSupport;
-use succinct::rank_select::cdiv;
 
 use std::env;
 use std::time::Instant;
@@ -30,11 +29,11 @@ fn main() {
 
     for s in sizes.iter() {
         let bv = BitVec::new(*s);
-        let rs = RankSupport::new(&bv);
+        let rs = RankSupport::new(bv);
 
         let t = Instant::now();
         for i in 0..repeats {
-            rs.rank((i + (i % 2) * (s / 2)) % s);
+            rs.rank1((i + (i % 2) * (s / 2)) % s);
         }
         let elapsed = (t.elapsed().as_nanos() as f32) / (repeats as f32);
         let overhead = rs.overhead();

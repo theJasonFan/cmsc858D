@@ -40,6 +40,6 @@ fn main() {
     let bytes = vec![0b10100011];
     let bv = BitVec::from_padded_bytes(&bytes, 6);
     bv.print_bits();
-    let rs = RankSupport::new(&bv);
+    let rs = RankSupport::new(bv);
     rs.print_repr();
 }
