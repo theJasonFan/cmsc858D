@@ -1,56 +1,39 @@
 use super::bv::{IntVec, BitVec};
-use std::cmp::min;
-
-pub fn rs() {
-    println!("Hello, world!");
-    let mut v = BitVec::new(128);
-    v.set_int(64-9, 7, 9);
-    //println!("{:?}", v.size_of());
-    println!("{:?}", BitVec::new(32).size_of());
-    println!("{:?}",  BitVec::new(32));
-    println!("{:?}", IntVec::new(32,3).size_of());
-    println!("{:?}", IntVec::new(32, 1));
-}
+use std::cmp::{min, max};
 
 #[derive(Debug)]
-pub struct RankSupport {
-    // pub bv: &'a BitVec,
-    pub bv: BitVec,
-    pub s: usize, // Probably can be smaller uint
-    pub b: usize, 
-    pub rs: IntVec,
-    pub rb: IntVec,
+pub struct RankSupport<'a> {
+    bv: &'a BitVec,
+    s: usize, // Probably can be smaller uint
+    b: usize, 
+    rs: IntVec,
+    rb: IntVec,
 }
 
-impl RankSupport {
-
-    pub fn from_bytes(bytes: &Vec<u8>) -> Self{
-       let bv = BitVec::from_bytes(bytes);
-       Self::new(bv)
-    }
+impl<'a> RankSupport<'a> {
     
-    pub fn new (bv: BitVec) -> Self {
-        let s = cdiv_2(clog(bv.len())*clog(bv.len()));
-        let b = cdiv_2(clog(bv.len()));
+    pub fn new (bv: &'a BitVec) -> Self {
+        let s = max(cdiv_2(clog(bv.len())*clog(bv.len())), 1);
+        let b = max(cdiv_2(clog(bv.len())), 1);
         let s = (s / b) * b; // hack to make s divisible! no more book keeping...
-        println!("n: {}, s: {}, b: {}", bv.len(), s, b);
         assert_eq!(s % b, 0);
-
+        let rs = Self::get_rs(&bv, s);
+        let rb = Self::get_rb(&bv, s,  b);
         Self {
-                bv: bv.clone(), //? is there a better way to do this?
+                bv: &bv, //? is there a better way to do this?
                 s: s,
                 b: b,
-                rs: Self::get_rs(&bv, s),
-                rb: Self::get_rb(&bv, s,  b)
+                rs: rs,
+                rb: rb,
             }
     }
 
-    pub fn  get_rs(bv: &BitVec, s: usize) -> IntVec{
+    fn  get_rs(bv: &BitVec, s: usize) -> IntVec{
         let n = bv.len();
         let n_blocks = cdiv(n, s);
-        let mut rs = IntVec::new(clog(n), n_blocks);
+        let w = max(clog(n), 1); //we still need 1 bit to store "0"
+        let mut rs = IntVec::new(w, n_blocks);
         let mut count = 0;
-        // First N blocks...
         for i in 0..(n_blocks - 1) {
             // then count each 32 bit chunk...
             let mut counted_bits = 0;
@@ -64,11 +47,12 @@ impl RankSupport {
         rs
     }
 
-    pub fn get_rb(bv: &BitVec, s: usize, b:usize) -> IntVec {
+    fn get_rb(bv: &BitVec, s: usize, b:usize) -> IntVec {
         let n = bv.len();
         let n_bblocks = cdiv(n, b);
-        let mut rp = IntVec::new(clog(s), n_bblocks);
+        let w = max(clog(s), 1); //we still need 1 bit to store "0"
 
+        let mut rp = IntVec::new(w, n_bblocks); 
         let mut counted_bits = 0;
         let mut count = 0;
         for i in 0..(n_bblocks - 1){
@@ -87,7 +71,8 @@ impl RankSupport {
         println!("{:?}", self.rb.to_vec());
     }
 
-    pub fn rank(&self, i: usize) -> u32 {
+    pub fn rank(&self, i: usize) -> usize {
+        assert!(i < self.len());
         let s_i = i / self.s;
         let r_s = self.rs.get_int(s_i);
 
@@ -99,11 +84,23 @@ impl RankSupport {
         let w = self.bv.get_int(p_i, width);
         let r_p = w.count_ones();
 
-        r_s + r_b + r_p
+        (r_s + r_b + r_p) as usize
     }
 
     pub fn len(&self) -> usize{
         self.bv.len()
+    }
+
+    pub fn size_of(&self) -> usize{
+        let mut size = std::mem::size_of::<Self>();
+        size += self.bv.size_of();
+        size += self.rs.size_of();
+        size += self.rb.size_of();
+        size
+    }
+
+    pub fn overhead(&self) -> usize{
+        self.size_of() * 8
     }
 }
 
@@ -123,7 +120,7 @@ fn flog(x: usize) -> usize {
     v - 1
 }
 
-fn cdiv(a: usize, b: usize) -> usize {
+pub fn cdiv(a: usize, b: usize) -> usize {
     if a % b == 0 {
         a / b
     } else {
@@ -144,10 +141,69 @@ fn fdiv_2(x: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use crate::rank_select::*;
-
     #[test]
     fn rank_easy(){
-        let rs = RankSupport::from_bytes(&vec![0b10010111,0b01001010]);
+        let bv = BitVec::from_bytes(&vec![0b10010111,0b01001010]);
+        let rs = RankSupport::new(&bv);
+        let rank = [1,1,1,2, 2,3,4,5, 5,6,6,6, 7,7,8,8];
+        for i in 0..bv.len(){
+            assert_eq!(rs.rank(i), rank[i]);
+        }
+    }
+
+    #[test]
+    fn rank_one(){
+        let reps = 100;
+        let bytes = &vec![!0u8; reps];
+        let pad = 7_usize;
+        let bv = BitVec::from_padded_bytes(bytes, pad);
+        let n_bits = reps * 8 - pad;
+        assert_eq!(bv.len(), n_bits);
+        let rs = RankSupport::new(&bv);
+        for i in 0..n_bits{
+            assert_eq!(rs.rank(i), i+1);
+        }
+    }
+
+    #[test]
+    fn rank_evens(){
+        let reps = 2;
+        let bytes = &vec![!0b10101010; reps];
+        let pad = 7_usize;
+        let bv = BitVec::from_padded_bytes(bytes, pad);
+        let n_bits = reps * 8 - pad;
+        assert_eq!(bv.len(), n_bits);
+        let rs = RankSupport::new(&bv);
+        for i in 0..n_bits{
+            assert_eq!(rs.rank(i), (i+1) / 2);
+        }
+    }
+
+    #[test]
+    fn rank_degenerate(){
+        let bytes = vec![0b11000000];
+        let bv = BitVec::from_padded_bytes(&bytes, 7);
+        let rs = RankSupport::new(&bv);
+        assert_eq!(rs.rank(0), 1);
+
+        let bv = BitVec::from_padded_bytes(&bytes, 6);
+        let rs = RankSupport::new(&bv);
+        assert_eq!(rs.rank(0), 1);
+        assert_eq!(rs.rank(1), 2);
+    }
+
+    #[test]
+    fn rank_odds(){
+        let reps = 2;
+        let bytes = &vec![!0b01010101; reps];
+        let pad = 7_usize;
+        let bv = BitVec::from_padded_bytes(bytes, pad);
+        let n_bits = reps * 8 - pad;
+        assert_eq!(bv.len(), n_bits);
+        let rs = RankSupport::new(&bv);
+        for i in 0..n_bits{
+            assert_eq!(rs.rank(i), (i / 2) + 1);
+        }
     }
 
     #[test]

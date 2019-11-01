@@ -42,4 +42,5 @@ fn main() {
     bv.print_bits();
     let rs = RankSupport::new(&bv);
     rs.print_repr();
+
 }

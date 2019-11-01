@@ -1,2 +1,2 @@
-mod bv;
-mod rank_select;
+pub mod bv;
+pub mod rank_select;

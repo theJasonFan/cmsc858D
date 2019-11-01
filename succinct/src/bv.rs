@@ -1,7 +1,7 @@
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct BitVec {
     n: usize,
-    blocks: Box<[u32]>,
+    blocks: Vec<u32>,
     n_blocks: usize,
 }
 
@@ -16,13 +16,13 @@ impl BitVec {
 
 		Self {
             n: n,
-            blocks: vec![0; n_blocks].into_boxed_slice(),
+            blocks: vec![0; n_blocks],
             n_blocks: n_blocks,
 		}
 	}
     
     pub fn get(&self, i: usize) -> bool {
-        self.get_int(i, 1) == 1        
+        self.get_int(i, 1) == 1     
     }
 
     pub fn set(&mut self, i: usize, v: bool) {
@@ -39,13 +39,14 @@ impl BitVec {
 
         let lo = i % 32_usize;
         let hi = (64_usize - lo - w) % 32_usize;
-
-        let v: u32;
+        
+        //let v = self.blocks[i / 32];
+        let mut v = 0;
         if lo + w <= 32 {
             let mut block = self.blocks[b_i];
             let mask = Self::get_mask(lo, w);
             block &= mask; // mask the other bits... 
-            v = block >> hi // shift over
+            v = block >> hi; // shift over
         } else {
             let lblock = self.blocks[b_i] as u64;
             let rblock = self.blocks[b_i + 1] as u64;
@@ -116,12 +117,20 @@ impl BitVec {
         std::mem::size_of::<Self>() + std::mem::size_of_val::<[u32]>(&*self.blocks)
     }
 
-    pub fn from_bytes(bytes: &Vec<u8>) -> Self {
-        let mut bv = Self::new(bytes.len() * 8);
-        for i in 0..bytes.len() {
+    pub fn from_padded_bytes(bytes: &Vec<u8>, pad: usize) -> Self {
+        assert!(pad <= 8);
+        let n_bytes = bytes.len();
+        let mut bv = Self::new(n_bytes * 8 - pad);
+        let last = n_bytes - 1;
+        for i in 0..last {
             bv.set_int(i*8, bytes[i] as u32, 8);
         }
+        bv.set_int(last * 8, bytes[last] as u32 >> pad, 8 - pad);
         bv
+    }
+
+    pub fn from_bytes(bytes: &Vec<u8>) -> Self {
+        Self::from_padded_bytes(bytes, 0)
     }
 
     pub fn print_bits(&self){
@@ -145,6 +154,7 @@ pub struct IntVec {
 
 impl IntVec {
     pub fn new(w: usize, n: usize) -> Self {
+        assert!(w > 0);
 		Self {
             word_size: w,
             bv: BitVec::new(w * n),
@@ -246,9 +256,9 @@ mod tests {
 
     #[test]
     fn get_boundary() {
-        let mut v = BitVec::new(127);
         //insert 1100011
         //get 10001
+        let mut v = BitVec::new(127);
         v.set_int(60, 0b1100011 as u32 , 7);
         assert_eq!(v.get_int(61, 5), 17);
     }
