@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Jason Fan <jasonfan@cs.umd.edu>"]
 edition = "2018"
 
-default-run = "rank_bench"
+default-run = "wt"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.dev]
@@ -12,3 +12,6 @@ default-run = "rank_bench"
 
 [dependencies]
 rand = "0.7.2"
+serde = { version = "1.0", features = ["derive"] }
+bincode = "1.2.0"
+csv = "1.1.1"

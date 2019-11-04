@@ -1,17 +1,19 @@
 use super::bv::{IntVec, BitVec};
 use super::rank_select::RankSupport;
 use super::math::{clog};
+use serde::{Serialize, Deserialize};
 // use std::str;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharTable {
     // minimal bit representation of ascii chars
     rs: RankSupport,
     width: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct WT {
+    n: usize,
     bv: Vec<RankSupport>,
     char_table: CharTable,
 }
@@ -22,6 +24,7 @@ pub struct WTBuilder<'a> {
     char_table: CharTable,
     l: usize, 
     n_chars: usize,
+    n: usize,
     bv: Vec<BitVec>,
     hist: IntVec, 
     spos: IntVec,
@@ -45,9 +48,9 @@ impl<'a> WTBuilder<'a> {
 
         // sigma log(n) bits for starting positions of blocks
         let spos = IntVec::new(clog(n), 2_usize.pow(l as u32) as usize); //oversize if log is not round
-
         Self {
             s: s,
+            n: n,
             char_table: ct,
             l: l,
             n_chars: n_chars,
@@ -72,9 +75,10 @@ impl<'a> WTBuilder<'a> {
     }
 
     pub fn build(&mut self) -> &Self {
+        if self.n_chars == 1 { return self }
+
         self.init_hist();
         self.init_bv();
-        
         // for [l-1 to 1]
         for i in 0..(self.l-1) {
             let li = self.l - 1 - i;
@@ -84,6 +88,7 @@ impl<'a> WTBuilder<'a> {
                 let hist2i = self.hist.get_int(2*i);
                 self.hist.set_int(i, hist2i + hist2i_plus1);
             }
+            //println!("{:?}",  self.hist.to_vec());
 
             self.spos.set_int(0, 0); // NOT SURE WHY THIS IS NOT IN THE TEX'd ALG
             for i in 1.. 2_usize.pow(li as u32) {
@@ -92,10 +97,14 @@ impl<'a> WTBuilder<'a> {
                 self.spos.set_int(i, spos_i_minus1 + hist_i_minus1);
             }
 
-            for (i, c) in self.s.chars().enumerate() {
+            for c in self.s.chars() {
                 let li_prefix = self.char_table.get_prefix(li, c);
                 let pos = self.spos.get_int(li_prefix);
-                self.spos.set_int(li_prefix, pos + 1); //increase the position by 1
+
+                if pos + 1 < self.n as u32 {
+                    // avoid edge case where we make pos + 1 length of the array.
+                    self.spos.set_int(li_prefix, pos + 1); //increase the position by 1
+                }
                 self.bv[li].set(pos as usize, self.char_table.get_bit(li, c));
             }
         }
@@ -108,6 +117,7 @@ impl<'a> WTBuilder<'a> {
             bv.push(RankSupport::new(bv_i.clone()));
         }
         WT {
+            n: self.n,
             bv: bv,
             char_table: self.char_table.clone(),
         }
@@ -125,6 +135,108 @@ impl WT {
     pub fn new(s: &str)  -> Self {
         assert!(s.is_ascii());
         WTBuilder::new(s).build().finish()
+    }
+
+    pub fn access(&self, i: usize) -> char {
+        if self.bv.len() == 0 { return self.char_table.get_char(0)}
+        let mut l = 0;
+        let mut r = self.n;
+        let last_l = self.char_table.width;
+        let mut curr_rank = i + 1;
+
+        let mut char_i = 0_usize;
+        for i in 0..last_l {
+            // look at the bit I care about
+            let curr_bit = self.bv[i].get(l + curr_rank - 1);
+
+            if curr_bit {
+                char_i = (char_i << 1) + 1
+            } else {
+                char_i = char_i << 1
+            }
+
+            // get the rank of the bit in the level in the chunk
+            curr_rank = self.bv[i].rel_rank(curr_bit, l, curr_rank - 1);
+
+            // if the rank is 0 in the chunk then we can just return.
+            // if curr_rank == 0 { return curr_rank};
+
+            if curr_bit { // go right
+                // count the zeros to get to the offset
+                l += self.bv[i].rel_rank(false, l,  r - l - 1);
+            } else { // go left
+                r -= self.bv[i].rel_rank(true, l,  r - l - 1);
+            }
+        }
+        self.char_table.get_char(char_i)
+    }
+
+    pub fn rank(&self, c: char, i: usize) -> usize {
+        if self.bv.len() == 0 { return i + 1 }
+        let mut l = 0;
+        let mut r = self.n;
+        let last_l = self.char_table.width;
+        let mut curr_rank = i + 1;
+
+        for i in 0..last_l {
+            // look at the bit I care about
+            let curr_bit = self.char_table.get_bit(i, c);
+
+            // get the rank of the bit in the level in the chunk
+            curr_rank = self.bv[i].rel_rank(curr_bit, l, curr_rank - 1);
+
+            // if the rank is 0 in the chunk then we can just return.
+            if curr_rank == 0 { return curr_rank};
+
+            if curr_bit { // go right
+                // count the zeros to get to the offset
+                l += self.bv[i].rel_rank(false, l,  r - l - 1);
+            } else { // go left
+                r -= self.bv[i].rel_rank(true, l,  r - l - 1);
+            }
+        }
+        curr_rank
+    }
+
+    pub fn select(&self, c: char, rank: usize) -> Option<usize> {
+        if self.bv.len() == 0 { return Some (rank - 1) }
+        let mut l = 0;
+        let mut r = self.n;
+        let last_l = self.char_table.width;
+        let mut curr_bit: bool;
+        let mut stack = vec![];
+
+        for i in 0..last_l {
+            // look at the bit I care about
+            curr_bit = self.char_table.get_bit(i, c);
+            stack.push((l,curr_bit));
+
+            if curr_bit { // go right
+                // count the zeros to get to the offset
+                l += self.bv[i].rel_rank(false, l,  r - l - 1);
+            } else { // go left
+                r -= self.bv[i].rel_rank(true, l,  r - l - 1);
+            }
+        }
+
+        let mut curr_index = rank - 1;
+        for i in 0..last_l {
+            let  lb = stack.pop().unwrap();
+            let option = self.bv[last_l - 1 - i].rel_select(lb.1, lb.0, curr_index + 1);
+
+            if option == None {return None}
+
+            curr_index = option.unwrap();
+        }
+
+        Some(curr_index)
+    } 
+
+    pub fn size_of(&self) -> usize {
+        let mut size = std::mem::size_of::<Self>();
+        size += self.bv.len() * self.bv[0].size_of();
+        size += self.char_table.size_of();
+        size
     }
 }
 
@@ -152,7 +264,7 @@ impl CharTable {
     pub fn get_bit(&self, i: usize, c: char) -> bool {
         assert!(i < self.width);
         assert!(self.in_charset(c));
-        let mut bits = self.i(c);
+        let bits = self.i(c);
         let mut mask = 1usize;
         mask <<= self.width - 1; // to most significnt bit
         mask >>=i;               // to the index
@@ -167,9 +279,19 @@ impl CharTable {
         self.i(c) >> (self.width - l)
     }
 
-    fn in_charset(&self, c: char) -> bool {
+    pub fn get_char(&self, char_i: usize) -> char {
+        self.rs.select1(char_i + 1).unwrap() as u8 as char
+    }
+
+    pub fn in_charset(&self, c: char) -> bool {
         let c_i = c as usize;
         c.is_ascii() && self.rs.get(c_i)
+    }
+
+    pub fn size_of(&self) -> usize {
+        let mut size = std::mem::size_of::<Self>();
+        size += self.rs.size_of();
+        size
     }
 }
 
@@ -183,13 +305,93 @@ pub fn count_chars(s: &str) -> usize {
 }
 
 #[cfg(test)]
-mod WT_tests {
+mod wt_tests {
     use crate::wt::*;
 
     #[test]
-    fn new() {
-        let s = "0167154263";
+    fn access() {
+        let s = "abracadabra";
         let wt = WT::new(&s);
+        for (i, c) in s.chars().enumerate() {
+            assert_eq!(wt.access(i), c);
+        }
+
+        let s = "yabadabadoy";
+        let wt = WT::new(&s);
+        for (i, c) in s.chars().enumerate() {
+            assert_eq!(wt.access(i), c);
+        }
+
+        let s = "tomorrow and tomorrow and tomorrow";
+        let wt = WT::new(&s);
+        for (i, c) in s.chars().enumerate() {
+            assert_eq!(wt.access(i), c);
+        }
+
+    }
+
+    #[test]
+    fn select() {
+        let s = "abracadabra";
+        let wt = WT::new(&s);
+        for (i, c) in s.chars().enumerate() {
+            println!("{}, {}", i, c);
+            assert_eq!(i, wt.select(c, wt.rank(c, i)).unwrap());
+        }
+    }
+
+    #[test]
+    fn rank() {
+        let s = "abracadabra";
+        let wt = WT::new(&s);
+        let ranks = [1,1,1,2,1,3,1,4,2,2,5];
+        for (i, c) in s.chars().enumerate() {
+            assert_eq!(wt.rank(c, i), ranks[i]);
+        }
+
+        let s = "yabadabadoy";
+        let wt = WT::new(&s);
+        let ranks = [1,1,1,2,1,3,2,4,2,1,2];
+        for (i, c) in s.chars().enumerate() {
+            assert_eq!(wt.rank(c, i), ranks[i]);
+        }
+
+        let s = "aaaaa";
+        let ranks = [1,2,3,4,5];
+        let wt = WT::new(&s);
+        for (i, c) in s.chars().enumerate() {
+            assert_eq!(wt.rank(c, i), ranks[i]);
+        }
+    }
+
+    #[test]
+    fn rank_hard() {
+        let s = "yabadabadooy";
+        let wt = WT::new(&s);
+        let ranks = [0,1,1,2,2,3,3,4,4,4,4,4];
+        for (i, _c) in s.chars().enumerate() {
+            assert_eq!(wt.rank('a', i), ranks[i]);
+        }
+
+        let ranks = [0,0,1,1,1,1,2,2,2,2,2,2];
+        for (i, _c) in s.chars().enumerate() {
+            assert_eq!(wt.rank('b', i), ranks[i]);
+        }
+
+        let ranks = [0,0,0,0,1,1,1,1,2,2,2,2];
+        for (i, _c) in s.chars().enumerate() {
+            assert_eq!(wt.rank('d', i), ranks[i]);
+        }
+
+        let ranks = [0,0,0,0,0,0,0,0,0,1,2,2];
+        for (i, _c) in s.chars().enumerate() {
+            assert_eq!(wt.rank('o', i), ranks[i]);
+        }
+
+        let ranks = [1,1,1,1,1,1,1,1,1,1,1,2];
+        for (i, _c) in s.chars().enumerate() {
+            assert_eq!(wt.rank('y', i), ranks[i]);
+        }
     }
 
     #[test]
@@ -200,14 +402,13 @@ mod WT_tests {
 }
 
 #[cfg(test)]
-mod WTBuilder_tests {
+mod wtbuilder_tests {
     use crate::wt::*;
 
     #[test]
     fn new() {
         let s = "0167154263";
         let n = 10_usize;
-        let l = 3_usize;
         let sigma = 8_usize;
 
         let wtb = WTBuilder::new(&s);
@@ -237,7 +438,7 @@ mod WTBuilder_tests {
         assert!(bv_same(&bv1, &wtb.bv[1].to_vec()));
 
         let bv2 = [false, true, true, false, true, true, false, false, true, false];
-        assert!(bv_same(&bv1, &wtb.bv[1].to_vec()));
+        assert!(bv_same(&bv2, &wtb.bv[2].to_vec()));
 
         let s = "01234";
         let mut wtb = WTBuilder::new(&s);
@@ -267,6 +468,18 @@ mod WTBuilder_tests {
         for i in 0..bv0.len() {
             assert_eq!(bv0.get(i), bits[i]);
         }
+    }
+
+    fn get_char() {
+        let ct = CharTable::new("0167154263");
+        assert_eq!(ct.get_char(0), '0');
+        assert_eq!(ct.get_char(1), '1');
+        assert_eq!(ct.get_char(2), '2');
+        assert_eq!(ct.get_char(3), '3');
+        assert_eq!(ct.get_char(4), '4');
+        assert_eq!(ct.get_char(5), '5');
+        assert_eq!(ct.get_char(6), '6');
+        assert_eq!(ct.get_char(7), '7');
     }
 
     #[test]

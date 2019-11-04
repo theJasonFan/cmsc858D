@@ -1,8 +1,9 @@
 use super::bv::{IntVec, BitVec};
 use std::cmp::{min, max};
 use super::math::{cdiv, cdiv_2, clog};
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RankSupport {
     bv: BitVec,
     s: usize, // Probably can be smaller uint
@@ -72,6 +73,36 @@ impl RankSupport {
         println!("{:?}", self.rb.to_vec());
     }
 
+    pub fn rank(&self, b: bool, i: usize) -> usize {
+        if b {
+            self.rank1(i)
+        } else {
+            self.rank0(i)
+        }
+    }
+
+    // relative rank in range from [l, \infty)
+    pub fn rel_rank(&self, b: bool, l: usize, i: usize) -> usize {
+        if l == 0 {
+            self.rank(b, i)
+        } else {
+            self.rank(b, l + i) - self.rank(b, l - 1)
+        }
+    }
+
+    pub fn rel_select(&self, b: bool, l: usize, r: usize) -> Option<usize> {
+        if l == 0 {
+            self.select(b, r)
+        } else {
+            let v = self.select(b, self.rank(b, l - 1) + r);
+            if v == None {
+                None
+            } else{
+                Some(v.unwrap() - l)
+            }
+        }
+    }
+
     pub fn rank1(&self, i: usize) -> usize {
         assert!(i < self.len());
         let s_i = i / self.s;
@@ -105,28 +136,37 @@ impl RankSupport {
         size
     }
 
-    pub fn select1(&self, i: usize) -> Option<usize> {
-        self.select1_(i, 0, self.len())
+    
+    pub fn select(&self, b: bool, r: usize) -> Option<usize> {
+        if b {
+            self.select1(r)
+        } else {
+            self.select0(r)
+        }
     }
 
-    pub fn select0(&self, i: usize) -> Option<usize> {
-        self.select0_(i, 0, self.len())
+    pub fn select1(&self, r: usize) -> Option<usize> {
+        self.select1_(r, 0, self.len())
+    }
+
+    pub fn select0(&self, r: usize) -> Option<usize> {
+        self.select0_(r, 0, self.len())
     }
 
     fn select1_(&self, i: usize, l:usize, r:usize) -> Option<usize> {
-        // finds i in [l, r)
-
-        //if range is empty, return!
         if r <= l { return None }
 
+        // finds i in [l, r)
+        //if range is empty, return!
         let p = l + ((r - l) / 2);
         let p_rank = self.rank1(p);
-        if self.bv.get(p) && p_rank == i {
+
+        if p_rank == i && self.bv.get(p) {
             Some(p)
-        } else if p_rank > i {
-            self.select1_(i, l, p)
-        } else { //p_rank <= i
+        } else if p_rank < i {
             self.select1_(i, p+1, r)
+        } else {
+            self.select1_(i, l, p)
         }
     }
 
@@ -138,12 +178,14 @@ impl RankSupport {
 
         let p = l + ((r - l) / 2);
         let p_rank = self.rank0(p);
-        if !self.bv.get(p) && p_rank == i {
+        //println!("{}, [{}, {}), {}, {}", i, l, r, p, p_rank);
+
+        if p_rank == i && !self.bv.get(p) {
             Some(p)
-        } else if p_rank > i {
-            self.select0_(i, l, p)
-        } else { //p_rank <= i
+        } else if p_rank < i {
             self.select0_(i, p+1, r)
+        } else {
+            self.select0_(i, l, p)
         }
     }
 
@@ -159,8 +201,24 @@ impl RankSupport {
 #[cfg(test)]
 mod tests {
     use crate::rank_select::*;
+
     #[test]
-    fn test_select(){
+    fn test_select1() {
+        let bv = BitVec::from_bytes(&vec![0b01001010]);
+        let rs = RankSupport::new(bv);
+        assert_eq!(rs.select1(1), Some(1));
+    }
+
+    #[test]
+    fn test_select0() {
+        let bv = BitVec::from_bytes(&vec![0b01001010]);
+        let rs = RankSupport::new(bv);
+        assert_eq!(rs.select0(1), Some(0));
+        assert_eq!(rs.select0(2), Some(2));
+
+    }
+    #[test]
+    fn test_select_easy(){
         let bv = BitVec::from_bytes(&vec![!0u8,!0u8]);
         let rs = RankSupport::new(bv);
 

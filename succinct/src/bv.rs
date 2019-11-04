@@ -1,4 +1,6 @@
-#[derive(Debug, Clone)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BitVec {
     n: usize,
     blocks: Vec<u32>,
@@ -61,7 +63,7 @@ impl BitVec {
 
     pub fn set_int(&mut self, i: usize, v: u32, w: usize) {
         assert!(i < self.len());
-        Self::val_fits(v, w);
+        assert!(Self::val_fits(v, w));
 
         let b_i = i / 32_usize;
 
@@ -95,8 +97,8 @@ impl BitVec {
     }
 
     fn val_fits(v: u32, word_size: usize) -> bool {
-        let mask = Self::get_mask(32 - word_size, word_size);
-        !mask & v == 0u32
+        //let mask = Self::get_mask(32 - word_size, word_size);
+        (v as u64 >> word_size) == 0u64 // hack to allow shifting by more than 32 bits
     }
 
     fn get_mask(i: usize, repeats:usize) ->u32{
@@ -154,9 +156,9 @@ impl BitVec {
 //     fn 
 // }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntVec {
-    word_size: usize,
+    pub word_size: usize,
     bv: BitVec,
     n: usize,
 }
@@ -177,6 +179,7 @@ impl IntVec {
     }
 
     pub fn set_int(&mut self, i: usize, v: u32) {
+        //println!("set int i{} v{}", i, v);
         assert!(i < self.len());
         self.bv.set_int(i * self.word_size, v, self.word_size)
     }
@@ -224,6 +227,7 @@ mod tests {
 
     #[test]
     fn check_val() {
+        assert!(BitVec::val_fits(1, 3));
         assert!(BitVec::val_fits(7, 3));
         assert!(!(BitVec::val_fits(8, 3)));
     }
