@@ -11,7 +11,7 @@ fn main() {
     USAGE:
         ./wt_n_bench [REPEATS] [SAMPLES] [MAX_EXP]
     
-    Times RANK operation for wavelet tree size with string lengths (0, 2^MAX_EXP] at SAMPLES even intervals
+    Times RANK operation for wavelet tree with string lengths (0, 2^MAX_EXP] at SAMPLES even intervals
     We use random ASCII strings here, when the string length is large, \sigma == 128 is almost certain.
     We use this test as a proxy for fixing charset size.
 
@@ -20,7 +20,7 @@ fn main() {
         SAMPLES lines with format <size>\t<time>\t<overhead> where:
             <size> is the size of bitvector in bits
             <time> is the average time of the operation in nanoseconds
-            <overhead> is the size of the RankSupport datastructure in bits.
+            <overhead> is the size of the WT datastructure in bytes.
     */
 
     let args: Vec<String> = env::args().collect();
