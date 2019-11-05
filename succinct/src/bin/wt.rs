@@ -1,14 +1,15 @@
 
 use succinct::wt::WT;
 use std::env;
-use serde::{Serialize, Deserialize};
 
 use std::fs::{self, File};
-use std::io::{self, prelude::*, BufReader};
-use std::process;
+use std::io::{prelude::*, BufReader};
 
 
 fn main() {
+    /* Wavelet Tree APP
+   
+    */
     let args: Vec<String> = env::args().collect();
     let subparser = &args[1];
     assert_eq!(args.len(), 4);
@@ -25,15 +26,29 @@ fn main() {
     }
 }
 
-fn build(s: &String, fp: &String) {
-    let wt = WT::new(s);
+fn build(in_file: &String, out_file: &String) {
+    /* Build a wavelet tree from a string containing an input text.
+
+    USAGE:
+        $wt build <input string> <output file>
+    
+    This command reads the string in <input file>, constructs the wavelet tree, 
+    and saves the resulting structure to the file <output file>.
+    
+    The program should also write two lines to standard out; 
+        - the first line should contain the number of distinct input characters
+          in the <input string> file 
+        - the second line should contain the number of characters in the input 
+          string. The command should be executed as follows:
+    */
+    let s = fs::read_to_string(in_file).expect("Failed to read input");
+    let wt = WT::new(&s);
     let encoded = bincode::serialize(&wt).unwrap();
 
-    println!("encoded {}", encoded.len());
-    println!("size {}", wt.size_of());
+    println!("{}", wt.n_chars());
+    println!("{}", wt.len());
 
-    fs::write(fp, &encoded).expect("Error");
-
+    fs::write(out_file, &encoded).expect("Failed to write output");
 }
 
 fn access(wt_path: &String, fp: &String) {
@@ -59,7 +74,6 @@ fn rank(wt_path: &String, fp: &String)  {
         .from_reader(reader);
     for record in rdr.records() {
         let r = record.expect("Error");
-        // let i = s.parse::<usize>().expect("line not an int");
         let c = r[0].chars().next().expect("Cannot parse character");
         let i = r[1].parse::<usize>().expect("Cannot parse index");
         println!("{}", wt.rank(c, i));
@@ -77,7 +91,6 @@ fn select(wt_path: &String, fp: &String)  {
         .from_reader(reader);
     for record in rdr.records() {
         let r = record.expect("Error");
-        // let i = s.parse::<usize>().expect("line not an int");
         let c = r[0].chars().next().expect("Cannot parse character");
         let i = r[1].parse::<usize>().expect("Cannot parse index");
         println!("{}", wt.select(c, i).expect("Not found"));

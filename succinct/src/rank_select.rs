@@ -13,7 +13,8 @@ pub struct RankSupport {
 }
 
 impl RankSupport {
-    
+    // Rank support for BitVec
+
     pub fn new(bv: BitVec) -> Self {
         let s = max(cdiv_2(clog(bv.len())*clog(bv.len())), 1);
         let b = max(cdiv_2(clog(bv.len())), 1);
@@ -22,7 +23,7 @@ impl RankSupport {
         let rs = Self::get_rs(&bv, s);
         let rb = Self::get_rb(&bv, s,  b);
         Self {
-                bv: bv.clone(), //? is there a better way to do this?
+                bv: bv.clone(),
                 s: s,
                 b: b,
                 rs: rs,
@@ -37,11 +38,10 @@ impl RankSupport {
         let mut rs = IntVec::new(w, n_blocks);
         let mut count = 0;
         for i in 0..(n_blocks - 1) {
-            // then count each 32 bit chunk...
             let mut counted_bits = 0;
             while counted_bits < s {
-                let bits_to_count = min(32, s - counted_bits);
-                count += bv.get_int(i*s + counted_bits, bits_to_count).count_ones();
+                let bits_to_count = min(32, s - counted_bits); // Get counts for S in 32 bit blocks...
+                count += bv.get_int(i*s + counted_bits, bits_to_count).count_ones(); // Aggregate pop-counts for u32
                 counted_bits += bits_to_count;
             }
             rs.set_int(i + 1, count);
@@ -67,6 +67,7 @@ impl RankSupport {
     }
 
     pub fn print_repr(&self) {
+        // Print internal representation for debug purposes
         println!("n: {}, s: {}, b: {}", self.bv.len(), self.s, self.b);
         self.bv.print_bits();
         println!("{:?}", self.rs.to_vec());
@@ -90,6 +91,7 @@ impl RankSupport {
         }
     }
 
+    // relative select for relative rank
     pub fn rel_select(&self, b: bool, l: usize, r: usize) -> Option<usize> {
         if l == 0 {
             self.select(b, r)
@@ -129,6 +131,7 @@ impl RankSupport {
     }
 
     pub fn size_of(&self) -> usize{
+        // Size in bytes
         let mut size = std::mem::size_of::<Self>();
         size += self.bv.size_of();
         size += self.rs.size_of();
@@ -172,13 +175,12 @@ impl RankSupport {
 
     fn select0_(&self, i: usize, l:usize, r:usize) -> Option<usize> {
         // finds i in [l, r)
-        // assert!(l)
+
         //if range is empty, return!
         if r <= l { return None }
 
         let p = l + ((r - l) / 2);
         let p_rank = self.rank0(p);
-        //println!("{}, [{}, {}), {}, {}", i, l, r, p, p_rank);
 
         if p_rank == i && !self.bv.get(p) {
             Some(p)
@@ -190,6 +192,7 @@ impl RankSupport {
     }
 
     pub fn overhead(&self) -> usize{
+        // Size in bits
         self.size_of() * 8
     }
 

@@ -10,6 +10,9 @@ default-run = "wt"
 [profile.dev]
 #opt-level = 3
 
+[profile.release]
+#opt-level = 3
+
 [dependencies]
 rand = "0.7.2"
 serde = { version = "1.0", features = ["derive"] }

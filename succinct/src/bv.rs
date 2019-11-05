@@ -1,4 +1,5 @@
 use serde::{Serialize, Deserialize};
+use super::math;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BitVec {
@@ -9,12 +10,8 @@ pub struct BitVec {
 
 impl BitVec {
     pub fn new(n: usize) -> Self {
-        let n_blocks: usize;
-        if n % 32_usize == 0 {
-            n_blocks = n / 32_usize;
-        } else {
-            n_blocks = n / 32_usize + 1;
-        }
+        // New Bitvector of lenght n
+        let n_blocks = math::cdiv(n, 32_usize);
 
 		Self {
             n: n,
@@ -24,10 +21,12 @@ impl BitVec {
 	}
     
     pub fn get(&self, i: usize) -> bool {
+        // Get bool at position i
         self.get_int(i, 1) == 1     
     }
 
     pub fn set(&mut self, i: usize, v: bool) {
+        // set [i] =  v
         if v {
             self.set_int(i, 1, 1);
         } else {
@@ -36,7 +35,9 @@ impl BitVec {
     }
 
     pub fn get_int(&self, i: usize, w: usize) -> u32 {
-        assert!(i < self.len());
+        // Read int from [i, i+w) as a u32
+
+        assert!(i + w <= self.len());
         // within
         let b_i = i / 32_usize;
 
@@ -62,6 +63,7 @@ impl BitVec {
     }
 
     pub fn set_int(&mut self, i: usize, v: u32, w: usize) {
+        // Set [i, i+w) with value v
         assert!(i < self.len());
         assert!(Self::val_fits(v, w));
 
@@ -97,8 +99,8 @@ impl BitVec {
     }
 
     fn val_fits(v: u32, word_size: usize) -> bool {
-        //let mask = Self::get_mask(32 - word_size, word_size);
-        (v as u64 >> word_size) == 0u64 // hack to allow shifting by more than 32 bits
+        // hack to allow shifting by more than 32 bits
+        (v as u64 >> word_size) == 0u64 
     }
 
     fn get_mask(i: usize, repeats:usize) ->u32{
@@ -117,10 +119,12 @@ impl BitVec {
     }
 
     pub fn size_of(&self) -> usize {
+        // Size of BitVec struct in bytes
         std::mem::size_of::<Self>() + std::mem::size_of_val::<[u32]>(&*self.blocks)
     }
 
     pub fn from_padded_bytes(bytes: &Vec<u8>, pad: usize) -> Self {
+        // Create new bit vector with 8*bytes - pad bits (ignore last pad bits)
         assert!(pad <= 8);
         let n_bytes = bytes.len();
         let mut bv = Self::new(n_bytes * 8 - pad);
@@ -133,10 +137,12 @@ impl BitVec {
     }
 
     pub fn from_bytes(bytes: &Vec<u8>) -> Self {
+        // Create new bit vector from bytes
         Self::from_padded_bytes(bytes, 0)
     }
 
     pub fn to_vec(&self) -> Vec<bool> {
+        // To native vector<bool> (not packed...)
         let mut v = vec![false; self.len()];
         for i in 0..self.len() {
             v[i] = self.get(i);
@@ -145,16 +151,13 @@ impl BitVec {
     }
 
     pub fn print_bits(&self){
+        // Print Bit Vector as stringi {0,1}^n
         for i in 0..self.len(){
             print!("{}", self.get(i) as u8);
         }
         print!("\n");
     }
 }
-
-// impl Copy for BitVec {
-//     fn 
-// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntVec {
@@ -165,6 +168,7 @@ pub struct IntVec {
 
 impl IntVec {
     pub fn new(w: usize, n: usize) -> Self {
+        // New bit-packed integer vector of length n with wordsize w
         assert!(w > 0);
 		Self {
             word_size: w,
@@ -179,7 +183,6 @@ impl IntVec {
     }
 
     pub fn set_int(&mut self, i: usize, v: u32) {
-        //println!("set int i{} v{}", i, v);
         assert!(i < self.len());
         self.bv.set_int(i * self.word_size, v, self.word_size)
     }
@@ -193,10 +196,12 @@ impl IntVec {
     }
 
     pub fn size_of(&self) -> usize {
+        // Size of IntVector in bytes
         std::mem::size_of::<Self>() + self.bv.size_of()
     }
 
     pub fn from_vec(elems: &Vec<u32>, w: usize) -> Self {
+        // Pack Vec<u32> into bitpacked IntVec of wordsize w
         let mut iv = Self::new(w, elems.len());
         for i in 0..iv.len() {
             iv.set_int(i, elems[i]);
@@ -204,6 +209,7 @@ impl IntVec {
         iv
     }
     pub fn to_vec(&self) -> Vec<u32> {
+        // To Vec<u32>
         let mut v = vec![0; self.len()];
         for i in 0..self.len(){
             v[i] = self.get_int(i);
@@ -214,7 +220,6 @@ impl IntVec {
 
 #[cfg(test)]
 mod tests {
-    // // Note this useful idiom: importing names from outer (for mod tests) scope.
     use crate::bv::*;
 
     #[test]

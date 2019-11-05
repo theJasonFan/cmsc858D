@@ -31,6 +31,9 @@ pub struct WTBuilder<'a> {
 }
 
 impl<'a> WTBuilder<'a> {
+    // Wavelet Tree builder class for Fischer, Kurpicz, and Noble. 
+    // "Simple, Fast and Lightweight Parallel Wavelet Tree Construction"
+    // Here, we use the pcWT (sequential) algorithm
 
     pub fn new(s: &'a str)  -> Self {
         assert!(s.is_ascii());
@@ -43,7 +46,7 @@ impl<'a> WTBuilder<'a> {
         // n log(sigma) for the bitvectors...
         let bv = vec![BitVec::new(n); l];
         
-        //sigma log(n) bits for HIST...
+        // sigma log(n) bits for HIST...
         let hist = IntVec::new(clog(n), 2_usize.pow(l as u32) as usize); //oversize if log is not round
 
         // sigma log(n) bits for starting positions of blocks
@@ -75,6 +78,8 @@ impl<'a> WTBuilder<'a> {
     }
 
     pub fn build(&mut self) -> &Self {
+        // Build the wavelent tree bit vectors.
+
         if self.n_chars == 1 { return self }
 
         self.init_hist();
@@ -83,26 +88,33 @@ impl<'a> WTBuilder<'a> {
         for i in 0..(self.l-1) {
             let li = self.l - 1 - i;
 
+            // Histogram of the prefixes
             for i in 0.. 2_usize.pow(li as u32) {
                 let hist2i_plus1 = self.hist.get_int(2*i + 1);
                 let hist2i = self.hist.get_int(2*i);
                 self.hist.set_int(i, hist2i + hist2i_plus1);
             }
-            //println!("{:?}",  self.hist.to_vec());
 
+            // Update SPos
             self.spos.set_int(0, 0); // NOT SURE WHY THIS IS NOT IN THE TEX'd ALG
             for i in 1.. 2_usize.pow(li as u32) {
                 let spos_i_minus1 = self.spos.get_int(i-1);
                 let hist_i_minus1 = self.hist.get_int(i-1);
-                self.spos.set_int(i, spos_i_minus1 + hist_i_minus1);
+                if spos_i_minus1 + hist_i_minus1 < self.n as u32 {
+                    // avoid edge case where we make spos length of the array.
+                    // NOT SURE WHY THIS IS NOT IN THE TEX'd ALG
+                    self.spos.set_int(i, spos_i_minus1 + hist_i_minus1);
+                }
             }
 
+            // Insert chars in into BitVec at level l_i
             for c in self.s.chars() {
                 let li_prefix = self.char_table.get_prefix(li, c);
                 let pos = self.spos.get_int(li_prefix);
 
                 if pos + 1 < self.n as u32 {
                     // avoid edge case where we make pos + 1 length of the array.
+                    // NOT SURE WHY THIS IS NOT IN THE TEX'd ALG
                     self.spos.set_int(li_prefix, pos + 1); //increase the position by 1
                 }
                 self.bv[li].set(pos as usize, self.char_table.get_bit(li, c));
@@ -112,6 +124,7 @@ impl<'a> WTBuilder<'a> {
     }
 
     pub fn finish(&self) -> WT {    
+        // Complete the construction. Create rank supported bit vectors.
         let mut bv = vec![];
         for bv_i in self.bv.iter() {
             bv.push(RankSupport::new(bv_i.clone()));
@@ -138,6 +151,7 @@ impl WT {
     }
 
     pub fn access(&self, i: usize) -> char {
+        assert!(i < self.n);
         if self.bv.len() == 0 { return self.char_table.get_char(0)}
         let mut l = 0;
         let mut r = self.n;
@@ -146,21 +160,20 @@ impl WT {
 
         let mut char_i = 0_usize;
         for i in 0..last_l {
-            // look at the bit I care about
+            // look at the bit I care about (The rank in the interval in this level)
             let curr_bit = self.bv[i].get(l + curr_rank - 1);
 
+            // Shift and set lowest order bit.
             if curr_bit {
                 char_i = (char_i << 1) + 1
             } else {
                 char_i = char_i << 1
             }
 
-            // get the rank of the bit in the level in the chunk
+            // Update the rank to look at in next level
             curr_rank = self.bv[i].rel_rank(curr_bit, l, curr_rank - 1);
 
-            // if the rank is 0 in the chunk then we can just return.
-            // if curr_rank == 0 { return curr_rank};
-
+            // Figure out the offset for the next level
             if curr_bit { // go right
                 // count the zeros to get to the offset
                 l += self.bv[i].rel_rank(false, l,  r - l - 1);
@@ -179,15 +192,16 @@ impl WT {
         let mut curr_rank = i + 1;
 
         for i in 0..last_l {
-            // look at the bit I care about
+            // Get next highest order bit to figure out traversal
             let curr_bit = self.char_table.get_bit(i, c);
 
-            // get the rank of the bit in the level in the chunk
+            // Update the rank to look at in next level
             curr_rank = self.bv[i].rel_rank(curr_bit, l, curr_rank - 1);
 
-            // if the rank is 0 in the chunk then we can just return.
+            // if the rank is 0 in the chunk then we can just return 0.
             if curr_rank == 0 { return curr_rank};
 
+            // Figure out the offset for the next level
             if curr_bit { // go right
                 // count the zeros to get to the offset
                 l += self.bv[i].rel_rank(false, l,  r - l - 1);
@@ -207,10 +221,13 @@ impl WT {
         let mut stack = vec![];
 
         for i in 0..last_l {
-            // look at the bit I care about
+            // Get next highest order bit to figure out traversal
             curr_bit = self.char_table.get_bit(i, c);
+
+            // Push the offset and the current bit onto the stack
             stack.push((l,curr_bit));
 
+            // Figure out the offset for the next level
             if curr_bit { // go right
                 // count the zeros to get to the offset
                 l += self.bv[i].rel_rank(false, l,  r - l - 1);
@@ -219,13 +236,18 @@ impl WT {
             }
         }
 
+        // Go from bottom to top, popping the stack..
+        
+        // Start with the index in the bottom interval as rank-1
         let mut curr_index = rank - 1;
         for i in 0..last_l {
+
+            // Get offset and corresponding bit in the next level up
             let  lb = stack.pop().unwrap();
+
+            // The next index to look at is the select of rank=(curr_index + 1)
             let option = self.bv[last_l - 1 - i].rel_select(lb.1, lb.0, curr_index + 1);
-
             if option == None {return None}
-
             curr_index = option.unwrap();
         }
 
@@ -233,10 +255,19 @@ impl WT {
     } 
 
     pub fn size_of(&self) -> usize {
+        // Size of struct in bytes
         let mut size = std::mem::size_of::<Self>();
         size += self.bv.len() * self.bv[0].size_of();
         size += self.char_table.size_of();
         size
+    }
+
+    pub fn n_chars(&self) -> usize {
+        self.char_table.n_chars()
+    }
+
+    pub fn len(&self) -> usize {
+        self.n
     }
 }
 
@@ -245,7 +276,7 @@ impl CharTable {
     pub fn new(s: &str) -> Self {
         assert!(s.is_ascii());
 
-        let mut bv = BitVec::new(128); //ascii only
+        let mut bv = BitVec::new(128);
         for c in s.chars() {
             bv.set(c as usize, true);
         }
@@ -256,6 +287,7 @@ impl CharTable {
     }
 
     pub fn i(&self, c: char) -> usize {
+        // Embedding is the rank of the char of the bitvector of possible asciis
         assert!(self.in_charset(c));
         let c_i = c as usize;
         self.rs.rank1(c_i) - 1
@@ -292,6 +324,11 @@ impl CharTable {
         let mut size = std::mem::size_of::<Self>();
         size += self.rs.size_of();
         size
+    }
+
+    pub fn n_chars(&self) -> usize {
+        // Size of encoded alphabet
+        self.rs.rank1(127)
     }
 }
 
@@ -333,6 +370,20 @@ mod wt_tests {
     #[test]
     fn select() {
         let s = "abracadabra";
+        let wt = WT::new(&s);
+        for (i, c) in s.chars().enumerate() {
+            println!("{}, {}", i, c);
+            assert_eq!(i, wt.select(c, wt.rank(c, i)).unwrap());
+        }
+
+        let s = "yabadabadoo";
+        let wt = WT::new(&s);
+        for (i, c) in s.chars().enumerate() {
+            println!("{}, {}", i, c);
+            assert_eq!(i, wt.select(c, wt.rank(c, i)).unwrap());
+        }
+
+        let s = "aaaaaaa";
         let wt = WT::new(&s);
         for (i, c) in s.chars().enumerate() {
             println!("{}, {}", i, c);

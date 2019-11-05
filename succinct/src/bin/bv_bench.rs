@@ -6,12 +6,21 @@ use succinct::bv::BitVec;
 use std::env;
 use std::time::Instant;
 
-fn rand_indices(s: usize, repeats: usize) -> Vec<usize>{
-    let mut rng = rand::thread_rng();
-    (0..repeats).map(|_x| rng.gen::<usize>() % s).collect()
-}
-
 fn main() {
+    /*
+    USAGE:
+        ./bv_bench [REPEATS] [SAMPLES] [MAX_EXP]
+    
+    Times bit-vector get for bit-vectors of size (0, 2^MAX_EXP] at SAMPLES even intervals
+
+    Outputs to stdout:
+        3 lines corresponding to args of the run
+        SAMPLES lines with format <size>\t<time>\t<overhead> where:
+            <size> is the size of bitvector in bits
+            <time> is the average time of the operation in nanoseconds
+            <overhead> is the size of the bitvec datastructure in bits.
+    */
+
     let args: Vec<String> = env::args().collect();
     assert_eq!(args.len(), 4);
     let repeats: usize = args[1].parse().unwrap();
@@ -28,9 +37,7 @@ fn main() {
 
     for s in sizes.iter() {
         let bv = BitVec::new(*s);
-        let is = rand_indices(*s, repeats);
-        assert_eq!(is.len(), repeats);
-
+        
         // Turns out cache accesses matter!
         let t = Instant::now();
         for i in 0..repeats {

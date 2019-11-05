@@ -13,6 +13,19 @@ fn rand_indices(s: usize, repeats: usize) -> Vec<usize>{
 }
 
 fn main() {
+    /*
+    USAGE:
+        ./sel_bench [REPEATS] [SAMPLES] [MAX_EXP]
+    
+    Times SELECT operation for rank supported for bit-vectors of size (0, 2^MAX_EXP] at SAMPLES even intervals
+
+    Outputs to stdout:
+        3 lines corresponding to args of the run
+        SAMPLES lines with format <size>\t<time>\t<overhead> where:
+            <size> is the size of bitvector in bits
+            <time> is the average time of the operation in nanoseconds
+            <overhead> is the size of the RankSupport datastructure in bits.
+    */
     let args: Vec<String> = env::args().collect();
     assert_eq!(args.len(), 4);
     let repeats: usize = args[1].parse().unwrap();
@@ -37,7 +50,6 @@ fn main() {
         }
         let elapsed = (t.elapsed().as_nanos() as f32) / (repeats as f32);
         let overhead = rs.overhead();
-        //let overhead=1;
         println!("{}\t{}\t{}", s, elapsed, overhead);
     }
     }
