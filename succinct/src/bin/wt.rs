@@ -52,6 +52,20 @@ fn build(in_file: &String, out_file: &String) {
 }
 
 fn access(wt_path: &String, fp: &String) {
+    /* Load a wavelet tree from file, and issue a series of access queries on 
+       the supplied indices
+    
+    USAGE:
+        $wt access <saved wt> <access indices>
+    
+    ARGUMENTS:
+        <saved wt>: the serialized wavelet tree from `build`
+        <access indices>: newline-separated list of indices (0-based) to access
+    
+    OUTPUT:
+        Characters (one per-line) corresponding to each index in the file 
+        <access indices> to standard out.
+    */
     let wt = load_wt(wt_path);
 
     let file = File::open(fp).expect("Error");
@@ -64,6 +78,21 @@ fn access(wt_path: &String, fp: &String) {
 }
 
 fn rank(wt_path: &String, fp: &String)  {
+    /* Load a wavelet tree from file, and issue a series of rank queries on 
+       the supplied indices
+    
+    USAGE:
+        $wt access <saved wt> <rank queries>
+    
+    ARGUMENTS:
+        <saved wt>: the serialized wavelet tree from `build`
+        <rank queries>: newline-separated, tab seperated tuples of <c>\t<i> 
+            for char c and index i.
+    
+    OUTPUT:
+        Characters (one per-line) corresponding to each rank query in the file 
+        <rank query> to standard out.
+    */
     let wt = load_wt(wt_path);
 
     let file = File::open(fp).expect("Error");
@@ -81,6 +110,21 @@ fn rank(wt_path: &String, fp: &String)  {
 }
 
 fn select(wt_path: &String, fp: &String)  {
+    /* Load a wavelet tree from file, and issue a series of select queries on 
+       the supplied indices
+    
+    USAGE:
+        $wt access <saved wt> <select queries>
+    
+    ARGUMENTS:
+        <saved wt>: the serialized wavelet tree from `build`
+        <select queries>: newline-separated, tab seperated tuples of <c>\t<i> 
+            for char c and index i.
+    
+    OUTPUT:
+        Characters (one per-line) corresponding to each select query in the file 
+        <select query> to standard out.
+    */
     let wt = load_wt(wt_path);
 
     let file = File::open(fp).expect("Error");
