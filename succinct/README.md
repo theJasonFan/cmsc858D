@@ -2,13 +2,16 @@
 
 ## Build
 Build Crate with:
+
     Cargo build --release
 
 Build and zip binaries with (binaries extracted to `\bin`):
+
     sh build_zip_bins.sh
 
 ## Test
 Run tests with:
+
     Cargo test
 
 ## Key Structs
