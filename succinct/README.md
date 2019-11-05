@@ -3,16 +3,16 @@
 ## Build
 Build Crate with:
 
-    Cargo build --release
+    cargo build --release
 
-Build and zip binaries with (binaries extracted to `\bin`):
+Build, extract, and zip binaries with (binaries built to `\bin`):
 
     sh build_zip_bins.sh
 
 ## Test
 Run tests with:
 
-    Cargo test
+    cargo test
 
 ## Key Structs
 
@@ -24,3 +24,6 @@ Run tests with:
 ## Binaries:
 - `wt` - with funcionality as specied here: https://rob-p.github.io/CMSC858D/assignments/02_homework_1
 - `<name>_bench` - programs to time and benchmark succinct datastructures (usages in source)
+
+## Examples:
+See examples for `wt` usage in `examples/`.
