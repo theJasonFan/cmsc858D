@@ -99,14 +99,9 @@ impl BlockedBloomFilter {
 
     pub fn with_fpr(fpr: f32, n: usize, block_size: usize) -> Self{
         /* Create BF with fp rate `fpr` and `n` expected elements */
+        let (k, m) = bf_with_fpr_config(fpr, n);
 
-        // 1) Calculate optimal size:
-        let m = (-1.0 * n as f32 * fpr.ln() / (LN_2 * LN_2)).ceil() as usize;
-
-        // 2) Calculate optimal k
-        let k = ((m as f32 / n as f32) * LN_2).ceil() as usize;
-
-        let n_blocks = cdiv(m, block_size);
+        let n_blocks = cdiv(m, block_size * 8);
 
         Self::new(k, n_blocks, block_size)
     }
@@ -147,7 +142,6 @@ impl BlockedBloomFilter {
     }
 }
 
-
 impl BloomFilter {
     pub fn new(k: usize, n: usize) -> Self{
         let mut rng = rand::thread_rng();
@@ -165,11 +159,7 @@ impl BloomFilter {
     pub fn with_fpr(fpr: f32, n: usize) -> Self{
         /* Create BF with fp rate `fpr` and `n` expected elements */
 
-        // 1) Calculate optimal size:
-        let m = (-1.0 * n as f32 * fpr.ln() / (LN_2 * LN_2)).ceil() as usize;
-
-        // 2) Calculate optimal k
-        let k = ((m as f32 / n as f32) * LN_2).ceil() as usize;
+        let (k, m) = bf_with_fpr_config(fpr, n);
 
         Self::new(k, m)
     }
@@ -191,6 +181,16 @@ impl BloomFilter {
         item.hash(&mut hasher);
         hasher.finish() as usize % self.len()
     }
+}
+
+fn bf_with_fpr_config(fpr: f32, n: usize) -> (usize, usize) {
+    // 1) Calculate optimal size:
+    let m = (-1.0 * n as f32 * fpr.ln() / (LN_2 * LN_2)).ceil() as usize;
+
+    // 2) Calculate optimal k
+    let k = ((m as f32 / n as f32) * LN_2).ceil() as usize;
+
+    (k, m)
 }
 
 #[cfg(test)]
