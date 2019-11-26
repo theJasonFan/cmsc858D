@@ -23,7 +23,7 @@ fn main() {
 
     } else if subparser == "query" {
         // Usage 
-        //   bf build <bloom_filter> <queries>
+        //   bf query <bloom_filter> <queries>
         assert_eq!(args.len(), 4);
         let bf = &args[2];
         let queries = &args[3];
