@@ -35,13 +35,13 @@ fn main() {
             insert_amq_up_to(insert_up_to, &mut bf);
             insert_amq_up_to(insert_up_to, &mut bbf);
 
-            let window_size = 500;
+            let window_size = n / 4;
             let query_from_0 = insert_up_to;
             let query_to_0 = insert_up_to + window_size;
             let query_from_50 = insert_up_to - (window_size / 2);
             let query_to_50 = insert_up_to + (window_size / 2);
             let query_from_100 = 0;
-            let query_to_100 = (window_size / 2);
+            let query_to_100 = window_size;
 
             let bf_n = bf.len();
             let bbf_n = bbf.len();
