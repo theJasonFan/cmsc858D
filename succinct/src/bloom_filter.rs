@@ -249,7 +249,7 @@ mod bf_tests {
         let mut bf = BloomFilter::with_fpr(0.5, 10);
 
         assert_eq!(bf.len(), 15);
-        assert_eq!(2, bf.n_hashes());
+        assert_eq!(1, bf.n_hashes());
     }
 
     fn bf_fpr_sanity() {
