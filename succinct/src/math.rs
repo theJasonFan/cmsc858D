@@ -1,3 +1,7 @@
+pub fn exp2(n: usize) -> usize {
+    1 << n
+}
+
 pub fn clog(x: usize) -> usize {
     let mut v = 0_usize;
     while x - 1 >> v != 0 {
@@ -33,7 +37,11 @@ pub fn fdiv_2(x: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use crate::math::*;
+    #[test]
+    fn test_exp2() {
+        assert_eq!(1024, exp2(10));
 
+    }
     #[test]
     fn test_clog(){
         assert_eq!(clog(1), 0);

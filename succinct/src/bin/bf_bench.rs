@@ -1,8 +1,11 @@
 use succinct::bloom_filter::{BlockedBloomFilter, BloomFilter, MQ};
+use succinct::math::{clog, exp2};
 use std::hash::Hash;
 
 use std::env;
 use std::time::Instant;
+use std::cmp::min;
+
 
 
 fn main() {
@@ -11,16 +14,22 @@ fn main() {
         ./bf_bench
     */
     
-    let n_ns = 10;
-    let max_n = 5000000;
+    // Sample Ns from log space
+    let n_ns = 20;
+    // let max_n = 5000000;
+    let max_n = 10000000;
     let min_n = 1000;
+
+    let log_max_n = (max_n as f32).ln();
+    let log_min_n = (min_n as f32).ln();
+
+    let log_incr_n = (log_max_n - log_min_n) / (n_ns - 1) as f32;
+    let mut ns: Vec<usize> = (0..n_ns).map(|x| (x as f32 * log_incr_n + log_min_n).exp() as usize).collect();
+    ns[n_ns - 1] = max_n;
 
     let n_fprs = 10;
     let min_fpr = 0.01;
     let max_fpr = 0.25;
-
-    let incr_n = (max_n - min_n) / (n_ns - 1);
-    let ns: Vec<usize> = (0..n_ns).map(|x| x * incr_n + min_n).collect();
 
     let incr_fpr = (max_fpr - min_fpr) / (n_fprs - 1) as f32;
     let fprs: Vec<f32> = (0..n_fprs).map(|x| x as f32 * incr_fpr + min_fpr).collect();
@@ -29,13 +38,13 @@ fn main() {
 
     for n in &ns {
         for fpr in &fprs {
-            let insert_up_to = (n / 4) * 3;
+            let insert_up_to = *n;
             let mut bf = BloomFilter::with_fpr(*fpr, *n);
             let mut bbf = BlockedBloomFilter::with_fpr(*fpr, *n, 64_usize);
             insert_amq_up_to(insert_up_to, &mut bf);
             insert_amq_up_to(insert_up_to, &mut bbf);
 
-            let window_size = n / 4;
+            let window_size = min(min_n, 5000);
             let query_from_0 = insert_up_to;
             let query_to_0 = insert_up_to + window_size;
             let query_from_50 = insert_up_to - (window_size / 2);

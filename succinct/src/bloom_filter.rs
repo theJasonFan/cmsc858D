@@ -185,12 +185,15 @@ impl BloomFilter {
 
 fn bf_with_fpr_config(fpr: f32, n: usize) -> (usize, usize) {
     // 1) Calculate optimal size:
-    let m = (-1.0 * n as f32 * fpr.ln() / (LN_2 * LN_2)).ceil() as usize;
+    let m = -1.0 * n as f32 * fpr.ln() / (LN_2 * LN_2);
 
     // 2) Calculate optimal k
-    let k = ((m as f32 / n as f32) * LN_2).ceil() as usize;
+    let k = ((m as f32 / n as f32) * LN_2).ceil();
 
-    (k, m)
+    // recalculate optimal size since we ceil k
+    let m_ceil = (k * n as f32 / LN_2).ceil();
+
+    (k as usize, m_ceil as usize)
 }
 
 #[cfg(test)]
